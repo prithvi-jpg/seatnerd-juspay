@@ -1,0 +1,26 @@
+{
+  "name": "seatnerd",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:init": "node --env-file=.env.local scripts/init-db.mjs",
+    "db:seed": "node --env-file=.env.local scripts/init-db.mjs --seed"
+  },
+  "dependencies": {
+    "@juspay-tech/hyper-js": "^2.1.0",
+    "@juspay-tech/react-hyper-js": "^2.3.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "next": "^15.5.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3"
+  }
+}

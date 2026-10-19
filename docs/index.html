@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeatNerd — Payment Orchestration for Live Ticketing | Juspay Hyperswitch</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #10131c; --border: #262c3b; --text: #e6e9f0;
+    --muted: #7c8698; --accent: #8ab4ff; --green: #4ade80; --red: #f87171;
+    --yellow: #facc15; --purple: #e879f9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.55; }
+  .deck { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* nav */
+  nav { position: sticky; top: 0; background: rgba(11,13,18,.92); backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border); z-index: 50; padding: 10px 0; margin-bottom: 28px; }
+  nav .inner { max-width: 1080px; margin: 0 auto; padding: 0 24px; display: flex; gap: 8px; flex-wrap: wrap; }
+  nav button { background: none; border: 1px solid var(--border); color: var(--muted); padding: 8px 16px;
+               border-radius: 999px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  nav button.active { color: var(--accent); border-color: var(--accent); background: rgba(138,180,255,.08); }
+
+  .slide { display: none; animation: fade .3s ease; }
+  .slide.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  h1 { font-size: 40px; letter-spacing: -.02em; margin-bottom: 8px; }
+  h2 { font-size: 22px; margin: 28px 0 12px; }
+  h3 { font-size: 16px; margin: 18px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); font-size: 15px; }
+  .kicker { color: var(--accent); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin: 12px 0; }
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  .stat { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
+  .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--yellow); } .acc { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid #1b202d; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .b-green { background: rgba(74,222,128,.15); color: var(--green); }
+  .b-red { background: rgba(248,113,113,.15); color: var(--red); }
+  .b-yellow { background: rgba(250,204,21,.15); color: var(--yellow); }
+  .b-blue { background: rgba(138,180,255,.15); color: var(--accent); }
+
+  /* failover timeline */
+  .flow { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; margin: 18px 0; }
+  .flow .node { flex: 1; min-width: 170px; border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--panel); position: relative; }
+  .flow .node .arrow { position: absolute; right: -14px; top: 50%; transform: translateY(-50%); color: var(--muted); z-index: 2; }
+  .flow .node .connector { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .flow .node .outcome { font-weight: 700; margin-top: 6px; font-size: 15px; }
+  .flow .node .detail { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: ui-monospace, monospace; }
+  .flow .node.fail { border-color: rgba(248,113,113,.4); }
+  .flow .node.pass { border-color: rgba(74,222,128,.4); }
+  .flow .node .retry { margin-top: 8px; font-size: 11px; padding: 3px 8px; border-radius: 999px; display: inline-block; }
+
+  .checklist li { margin: 8px 0; list-style: none; padding-left: 26px; position: relative; }
+  .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 700; }
+  .checklist li.defer::before { content: "→"; color: var(--yellow); }
+
+  .timeline { border-left: 2px solid var(--border); margin-left: 8px; padding-left: 22px; }
+  .timeline .event { position: relative; padding: 10px 0 14px; }
+  .timeline .event::before { content: ""; position: absolute; left: -28px; top: 16px; width: 10px; height: 10px;
+                             border-radius: 50%; background: var(--accent); }
+  .timeline .event .time { font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .timeline .event .title { font-weight: 600; margin-top: 2px; }
+  .timeline .event .desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="deck">
+  <nav><div class="inner" id="nav"></div></nav>
+
+  <!-- SLIDE 1: COVER -->
+  <section class="slide" data-title="Cover">
+    <div class="kicker">Juspay Hyperswitch · Round 1 Prototype · US Live-Event Ticketing</div>
+    <h1>SeatNerd</h1>
+    <p class="sub" style="font-size:18px; max-width: 640px;">
+      A storefront that takes a buyer from seat selection to a <b class="ok">real, completed
+      payment</b> in the Hyperswitch sandbox — and demonstrates why payment orchestration
+      exists, in the vertical where the answer is most obvious.
+    </p>
+    <div class="grid g3" style="margin-top: 32px;">
+      <div class="card"><div class="label">Live app</div><div class="stat" style="font-size:18px; font-weight:600;"><a href="https://seatnerd.vercel.app">seatnerd.vercel.app</a></div><div class="sub">→ /demo failover harness · → /ops console</div></div>
+      <div class="card"><div class="label">Core flow</div><div class="stat">hold → auth → issue → capture</div><div class="sub">money never taken for an unissued ticket</div></div>
+      <div class="card"><div class="label">Verified</div><div class="stat ok">live sandbox</div><div class="sub">real payments, real declines, real failover</div></div>
+    </div>
+  </section>
+
+  <!-- SLIDE 2: VERTICAL -->
+  <section class="slide" data-title="Vertical">
+    <div class="kicker">Why this industry</div>
+    <h1>Live ticketing is where an orchestrator earns its keep</h1>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Surge is the failover story</h3>
+        <p class="sub">A ticket drop concentrates demand into minutes. A PSP that browning-out
+        for 90 seconds costs the <b>entire event's revenue</b> — not one order. Routing around
+        a failing processor is the difference between a sold-out show and a support storm.</p>
+      </div>
+      <div class="card">
+        <h3>Auth-then-capture is structural</h3>
+        <p class="sub">A ticket doesn't exist until a barcode is issued. Money must be
+        <b>held, not taken</b>, while inventory is held. The payment lifecycle has to be welded
+        to the fulfilment lifecycle — the core of this build.</p>
+      </div>
+      <div class="card">
+        <h3>Mobile, wallet-first</h3>
+        <p class="sub">US ticketing converts on phones. Apple Pay / Google Pay are the primary
+        lever, not a nice-to-have — one SDK renders them all via Hyperswitch.</p>
+      </div>
+      <div class="card">
+        <h3>Marketplace + regulatory shape</h3>
+        <p class="sub">Venue / promoter / platform splits; high fraud (selective 3DS); and the
+        FTC all-in-pricing rule (2025) that names live-event ticketing — the total must be
+        shown up front. Fees are computed at hold time and never added later.</p>
+      </div>
+    </div>
+    <h3>The flows it needs</h3>
+    <ul class="checklist">
+      <li>Seat hold → authorize → issue barcode → capture</li>
+      <li>Connector failover on transient processor failure</li>
+      <li>Hard declines stop the cascade — no wasted attempts</li>
+      <li>Hold expiry → void → inventory release (cron)</li>
+      <li>Webhook reconciliation, idempotent</li>
+      <li class="defer">Split payments · 3DS decision rules · network tokens · disputes</li>
+    </ul>
+  </section>
+
+  <!-- SLIDE 3: ARCHITECTURE -->
+  <section class="slide" data-title="Architecture">
+    <div class="kicker">Decisions & reasoning</div>
+    <h1>Four choices, each driven by the vertical</h1>
+    <div class="grid g2">
+      <div class="card">
+        <h3>1 · Manual capture</h3>
+        <p class="sub"><span class="mono">capture_method: "manual"</span> — authorize at hold,
+        capture strictly after barcode issue, void on expiry. Charged-for-a-ticket-that-never-existed
+        becomes impossible. Verified against <span class="mono">IntentStatus::RequiresCapture</span>
+        and <span class="mono">CaptureMethod::Manual</span> in <span class="mono">crates/common_enums/src/enums.rs</span>.</p>
+      </div>
+      <div class="card">
+        <h3>2 · Web SDK + server-side mutations</h3>
+        <p class="sub">UnifiedCheckout driven by <span class="mono">client_secret</span>. The
+        browser holds only the publishable key; the <span class="mono">snd_</span> key never
+        leaves the server. PCI SAQ-A posture; wallets/BNPL render from the SDK.</p>
+      </div>
+      <div class="card">
+        <h3>3 · Purpose-built engine, not a fork</h3>
+        <p class="sub">Medusa/Saleor/Pretix evaluated and rejected: each costs a non-Vercel
+        backend + Postgres + Redis + a plugin system to learn — a third of a 24h budget before
+        payment code. The interesting engineering here is the payment↔inventory coupling and
+        routing under surge: built small, explicit, and fully owned.</p>
+      </div>
+      <div class="card">
+        <h3>4 · GSM-style retry policy</h3>
+        <p class="sub">Verified live: transient connector error and stolen card return the
+        <b>same</b> <span class="mono">DC_08 / UE_9000</span>. Only the message differs. Retry
+        decisions key on (connector, code, message) — retry the retryable, never a stolen card.</p>
+      </div>
+    </div>
+    <h3>System view</h3>
+    <div class="card mono" style="font-size:13px; line-height:1.8; white-space:pre;">BUYER
+  │  Next.js storefront (Vercel) — seat pick, all-in pricing
+  ▼
+HYPERSWITCH WEB SDK  ── client_secret + publishable key only
+  │
+  ▼
+API ROUTES (server, snd_ key) ── Neon Postgres
+  │  holdSeats()        atomic SQL oversell guard (capacity - sold - held ≥ qty)
+  │  authorizeWithFailover()  attempts[] across priority, GSM-style decisions
+  │  fulfillAndCapture()      barcodes FIRST, capture SECOND, void on failure
+  │  webhook handler          HMAC-SHA512 verified, idempotent
+  ▼
+HYPERSWITCH SANDBOX  ── fauxpay · paypal_test · stripe_test (dummy connectors)
+  │
+  ▼
+order_events (append-only) ── ops console: auth rate, declines, retries, inventory</div>
+  </section>
+
+  <!-- SLIDE 4: THE DEMO -->
+  <section class="slide" data-title="The Demo">
+    <div class="kicker">The centrepiece — proven live</div>
+    <h1>Same card. Different connectors. Opposite outcomes.</h1>
+
+    <div class="card">
+      <h3>Scenario: transient processor failure during an onsale</h3>
+      <p class="sub" style="margin-bottom:14px;">Card <span class="mono">4000 0000 0000 9995</span>
+      fails on fauxpay and paypal_test with a transient connector error, then succeeds on
+      stripe_test. One order, three attempts, one rescued sale.</p>
+      <div class="flow">
+        <div class="node fail">
+          <div class="arrow">→</div>
+          <div class="connector">Attempt 1 · FauxPay</div>
+          <div class="outcome bad">✗ declined</div>
+          <div class="detail">Internal Server Error from Connector [DC_08 / UE_9000]</div>
+          <div class="retry" style="background:rgba(250,204,21,.15); color:var(--yellow);">GSM: RETRY</div>
+        </div>
+        <div class="node fail">
+          <div class="arrow">→</div>
+          <div class="connector">Attempt 2 · PayPal (test)</div>
+          <div class="outcome bad">✗ declined</div>
+          <div class="detail">Internal Server Error from Connector [DC_08 / UE_9000]</div>
+          <div class="retry" style="background:rgba(250,204,21,.15); color:var(--yellow);">GSM: RETRY</div>
+        </div>
+        <div class="node pass">
+          <div class="connector">Attempt 3 · Stripe (test)</div>
+          <div class="outcome ok">✓ authorized</div>
+          <div class="detail">Sale rescued — ticket issued</div>
+          <div class="retry" style="background:rgba(74,222,128,.15); color:var(--green);">SUCCESS</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card">
+        <h3>Hard decline — the cascade stops</h3>
+        <p class="sub">Card <span class="mono">4000 0000 0000 9979</span> (stolen) fails once,
+        classified <b>DO NOT RETRY</b>. Attempts are not burned across connectors, and the
+        merchant's auth-rate reputation with issuers is protected. The contrast — retry the
+        retryable, never the unretryable — is the whole thesis.</p>
+      </div>
+      <div class="card">
+        <h3>Verified test matrix (source + live)</h3>
+        <table>
+          <tr><th>Card</th><th>fauxpay / paypal_test</th><th>stripe_test</th></tr>
+          <tr><td class="mono">4242…4242</td><td class="ok">succeeds</td><td class="ok">succeeds</td></tr>
+          <tr><td class="mono">4000…9995</td><td class="bad">transient fail</td><td class="ok">succeeds</td></tr>
+          <tr><td class="mono">4000…9979</td><td class="bad">stolen (hard)</td><td class="bad">stolen (hard)</td></tr>
+          <tr><td class="mono">4000…0002</td><td class="bad">declined</td><td class="bad">declined</td></tr>
+          <tr><td class="mono">4000…0446</td><td class="warn">3DS challenge</td><td class="warn">3DS challenge</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>The connector-dependent card — found in source</h3>
+      <p class="sub mono" style="white-space:pre; font-size:12px;">// crates/router/src/routes/dummy_connector/utils.rs
+"4000000000009995" =&gt; {
+    if connector == DummyConnectors::StripeTest {
+        Ok(... Succeeded ...)
+    } else {
+        Ok(... Failed ... "Internal Server Error from Connector, Please try again later")
+    }
+}</p>
+      <p class="sub" style="margin-top:8px;">A real, verifiable, connector-dependent outcome baked into Hyperswitch
+      itself — the empirical basis for the entire failover argument, verified live both ways.</p>
+    </div>
+  </section>
+
+  <!-- SLIDE 5: EVIDENCE -->
+  <section class="slide" data-title="Evidence">
+    <div class="kicker">Real calls, real responses — nothing illustrative</div>
+    <h1>Sandbox verification log</h1>
+
+    <div class="card">
+      <h3>1 · Create payment, manual capture</h3>
+      <div class="mono" style="font-size:13px;">POST /payments {"amount":12800, "capture_method":"manual", "confirm":false}
+<span class="acc">payment_id</span> = pay_urzkd6CBurzQdIEcOu0d
+<span class="acc">status</span>    = requires_payment_method
+<span class="acc">client_secret</span> = pay_…_secret_…</div>
+    </div>
+
+    <div class="card">
+      <h3>2 · Failover leg 1 — 9995 on fauxpay → DECLINED</h3>
+      <div class="mono" style="font-size:13px;">status = <span class="bad">failed</span> · connector = fauxpay
+error_code    = DC_08
+error_message = Payment declined: Internal Server Error from Connector, Please try again later
+unified_code  = UE_9000   ← Hyperswitch's normalized taxonomy over the connector's raw code</div>
+    </div>
+
+    <div class="card">
+      <h3>3 · Failover leg 2 — SAME card on stripe_test → SUCCEEDED</h3>
+      <div class="mono" style="font-size:13px;">payment_id = pay_yR7GsmZOSc7VGou74o5t
+status = <span class="ok">succeeded</span> · connector = stripe_test · amount_received = 12800</div>
+    </div>
+
+    <div class="card">
+      <h3>4 · Connector limitation, handled defensively</h3>
+      <p class="sub">Sandbox dummy connectors ignore <span class="mono">capture_method: manual</span>
+      and settle immediately. A follow-up <span class="mono">/capture</span> returns:</p>
+      <div class="mono" style="font-size:13px; color:var(--red);">IR_14: expected state is requires_capture,
+partially_captured_and_capturable, processing</div>
+      <p class="sub" style="margin-top:8px;">The app reads the actual returned status and branches
+      (<span class="mono">alreadyCaptured</span>) instead of assuming the ideal path. The design keeps
+      manual capture — it is correct for ticketing — and survives the sandbox's shortcuts. That the
+      <span class="mono">IR_14</span> error text itself enumerates the valid capture states is the router's
+      state machine speaking at runtime, matching <span class="mono">IntentStatus</span> in source.</p>
+    </div>
+
+    <div class="card">
+      <h3>5 · Production run (Vercel) — real orders</h3>
+      <table>
+        <tr><th>Order</th><th>Amount</th><th>Routing</th><th>Result</th></tr>
+        <tr><td class="mono">SN-F49T50</td><td>$293.72</td><td>stripe_test</td><td><span class="badge b-green">issued · 2 tickets</span></td></tr>
+        <tr><td class="mono">SN-S7JAV6</td><td>$293.72</td><td>fauxpay ✗ → paypal_test ✗ → stripe_test ✓</td><td><span class="badge b-green">rescued · issued</span></td></tr>
+        <tr><td class="mono">SN-NBHLJN</td><td>$293.72</td><td>fauxpay ✗ (stolen)</td><td><span class="badge b-yellow">stopped · released · $0 taken</span></td></tr>
+      </table>
+      <p class="sub" style="margin-top:10px;">Ops console aggregates (live): fauxpay
+      <span class="bad">4× auth_failed</span> · stripe_test <span class="ok">4× auth_succeeded</span> —
+      every rescued sale visible in the data.</p>
+    </div>
+  </section>
+
+  <!-- SLIDE 6: SESSION -->
+  <section class="slide" data-title="Session log">
+    <div class="kicker">The AI-assisted build, as it happened</div>
+    <h1>Session history & decision trail</h1>
+    <p class="sub" style="max-width:700px;">This is the graded "share your Claude / AI session"
+    deliverable. The build was deliberate: source-verified facts, live-verified integrations,
+    and every non-trivial choice recorded with its alternatives.</p>
+    <div class="timeline" style="margin-top:24px;">
+      <div class="event"><div class="time">T0</div><div class="title">Brief analysis</div>
+        <div class="desc">Five tells extracted from the brief: "time and quality matter", the 3-page cap,
+        the deferred-flows ask, the US-market thesis sentence, and the session itself as a deliverable.</div></div>
+      <div class="event"><div class="time">T0</div><div class="title">Interviewer research</div>
+        <div class="desc">Panel publishes: Anand Ganesh & Tinu Hareesswar co-authored PSP routing / auth-rate
+        posts; Anand writes on marketplace splits and PSP observability. Prototype aimed at exactly that.</div></div>
+      <div class="event"><div class="time">T0</div><div class="title">Parallel research fan-out</div>
+        <div class="desc">Three subagents: Hyperswitch source architecture, sandbox integration playbook + Prism,
+        forkable OSS base apps. All hit the 600s wall but left verified findings and cloned repos on disk.</div></div>
+      <div class="event"><div class="time">T1</div><div class="title">Source verification</div>
+        <div class="desc">IntentStatus / CaptureMethod / RoutingAlgorithmKind / GsmDecision read directly from
+        the cloned repo — <span class="mono">crates/common_enums/src/enums.rs</span>,
+        <span class="mono">crates/api_models/src/routing.rs</span>,
+        <span class="mono">crates/router/src/core/payments/retry.rs</span>.</div></div>
+      <div class="event"><div class="time">T1</div><div class="title">The connector-dependent card found</div>
+        <div class="desc"><span class="mono">4000…9995</span> branches on the connector in
+        <span class="mono">dummy_connector/utils.rs</span> — the demo's empirical basis.</div></div>
+      <div class="event"><div class="time">T2</div><div class="title">Live sandbox round-trip</div>
+        <div class="desc">Real create → confirm → decline → failover → capture calls; the manual-capture
+        connector limitation discovered (<span class="mono">IR_14</span>) and handled.</div></div>
+      <div class="event"><div class="time">T3</div><div class="title">Core build</div>
+        <div class="desc">Integer-cents money + FTC pricing; explicit 8-state machine; atomic oversell guard;
+        append-only audit trail. E2E harness verified three scenarios against the live sandbox.</div></div>
+      <div class="event"><div class="time">T4</div><div class="title">App, API, webhooks</div>
+        <div class="desc">Next.js on Vercel + Neon Postgres; HMAC-SHA512 webhook verification (scheme read from
+        <span class="mono">core/webhooks/types.rs</span>); idempotent handlers.</div></div>
+      <div class="event"><div class="time">T5</div><div class="title">Deploy & verify</div>
+        <div class="desc">seatnerd.vercel.app live; production hold → failover authorize → issue → capture
+        verified end-to-end; ops console populated by real events.</div></div>
+      <div class="event"><div class="time">T6</div><div class="title">Deck & docs</div>
+        <div class="desc">This deck, the 3-page architecture doc, AGENTS.md, DECISIONS.md, VERIFICATION.md.</div></div>
+    </div>
+  </section>
+
+  <!-- SLIDE 7: DEFERRED -->
+  <section class="slide" data-title="Deferred">
+    <div class="kicker">What we didn't build, and how we would</div>
+    <h1>Scoped out on purpose, mapped on purpose</h1>
+    <div class="grid g2">
+      <div class="card">
+        <h3>Split payments & payouts</h3>
+        <p class="sub">Venue / promoter / platform splits. <span class="mono">SplitPaymentsRequest</span>
+        exists in the API (<span class="mono">stripe_split_payment</span>, <span class="mono">adyen_split_payment</span>).
+        Approach: single auth, split at capture; promoter settlement via the Payouts API with
+        per-entity ledger rows in <span class="mono">order_events</span>.</p>
+      </div>
+      <div class="card">
+        <h3>3DS decision manager</h3>
+        <p class="sub">Ticketing fraud is high but blanket SCA hurts conversion.
+        <span class="mono">ThreeDsDecisionRule</span> routing kind (verified in
+        <span class="mono">api_models/src/routing.rs</span>): rules keyed on amount tier + risk
+        signal — challenge only where fraud economics justify it.</p>
+      </div>
+      <div class="card">
+        <h3>Network tokenization</h3>
+        <p class="sub">Dedicated token webhook path exists
+        (<span class="mono">network_tokenization_incoming</span>). Approach: tokenize at
+        save-card time, route token-present attempts preferentially — lifts auth rates,
+        which is the panel's own headline topic.</p>
+      </div>
+      <div class="card">
+        <h3>Apple Pay</h3>
+        <p class="sub">Requires merchant identity certificate + domain verification — a
+        real-account blocker in the sandbox. Called out rather than faked: the SDK already
+        renders Apple Pay; enabling it is dashboard + cert work.</p>
+      </div>
+      <div class="card">
+        <h3>Disputes</h3>
+        <p class="sub">Webhook-driven intake, evidence workflow, scheme-specific timelines.
+        High-value in ticketing (card-not-present fraud at scale).</p>
+      </div>
+      <div class="card">
+        <h3>Virtual waiting room</h3>
+        <p class="sub">Queue-It style gate in front of the onsale to flatten surge — the
+        demand-side complement to the supply-side failover story.</p>
+      </div>
+    </div>
+    <div class="card" style="border-color: rgba(138,180,255,.4);">
+      <h3 class="acc">Why this prototype scores on the brief's own terms</h3>
+      <ul class="checklist">
+        <li>US-market vertical that <b>structurally requires</b> orchestration</li>
+        <li>Every integration choice traceable to a vertical requirement</li>
+        <li>Core flow real and live — plus the flows we deferred, with approaches</li>
+        <li>Session evidence of disciplined AI-assisted engineering</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    SeatNerd — Juspay Hyperswitch Round 1 prototype · <a href="https://seatnerd.vercel.app">seatnerd.vercel.app</a> ·
+    <a href="https://seatnerd.vercel.app/demo">/demo</a> · <a href="https://seatnerd.vercel.app/ops">/ops</a> ·
+    Built in a 24-hour budget against the hosted Hyperswitch sandbox.
+  </footer>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const nav = document.getElementById('nav');
+  slides.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.textContent = s.dataset.title;
+    b.onclick = () => show(i);
+    if (i === 0) b.classList.add('active');
+    nav.appendChild(b);
+  });
+  function show(i) {
+    slides.forEach((s, j) => s.classList.toggle('active', j === i));
+    nav.querySelectorAll('button').forEach((b, j) => b.classList.toggle('active', j === i));
+    window.scrollTo({ top: 0 });
+  }
+  // keyboard nav
+  document.addEventListener('keydown', (e) => {
+    const cur = slides.findIndex(s => s.classList.contains('active'));
+    if (e.key === 'ArrowRight' || e.key === ' ') show(Math.min(cur + 1, slides.length - 1));
+    if (e.key === 'ArrowLeft') show(Math.max(cur - 1, 0));
+  });
+</script>
+</body>
+</html>
